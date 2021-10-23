@@ -94,14 +94,19 @@ namespace CCTVBackup
                         {
                             string fileName = textFile.Substring(sourceDir.Length);
 
-                            File.Copy(System.IO.Path.Combine(sourceDir, fileName),
-                                    System.IO.Path.Combine(backupDir, fileName), false);
+                            try
+                            {
+                                File.Copy(System.IO.Path.Combine(sourceDir, fileName),
+                                    System.IO.Path.Combine(backupDir, fileName));
+                            }
+                            catch (IOException)
+                            {
+                            }
+                            
                         }
 
                         notifyIcon.ShowBalloonTip(5000, "CCTV", "Files copied success", ToolTipIcon.Info);
-
                         notifyIcon.Icon = iconMain;
-
                     }
                 }
             };
