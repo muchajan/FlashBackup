@@ -79,9 +79,18 @@ namespace CCTVBackup
                         string sourceDir = @drive.RootDirectory.ToString();
                         string backupDir = appConfig.Get("backupDir");
 
-                        string[] textFiles = Directory.GetFiles(sourceDir);
+                        string[] filesToCopy = Directory.GetFiles(sourceDir, "*.*", SearchOption.AllDirectories);
+                        string[] directoriesToCopy = Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories);
 
-                        foreach (string textFile in textFiles)
+                        System.IO.Directory.CreateDirectory(backupDir);
+
+                        foreach (string dirPath in directoriesToCopy)
+                        {
+                            string dirPathStripped = dirPath.Substring(sourceDir.Length);
+                            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(backupDir, dirPathStripped));
+                        }
+
+                        foreach (string textFile in filesToCopy)
                         {
                             string fileName = textFile.Substring(sourceDir.Length);
 
