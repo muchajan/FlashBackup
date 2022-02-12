@@ -79,16 +79,9 @@ namespace CCTVBackup
                         string sourceDir = @drive.RootDirectory.ToString();
                         string backupDir = appConfig.Get("backupDir");
 
-                        string[] filesToCopy = Directory.GetFiles(sourceDir, "*.*", SearchOption.AllDirectories);
-                        string[] directoriesToCopy = Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories);
+                        List<string> filesToCopy = new List<string>();
 
-                        System.IO.Directory.CreateDirectory(backupDir);
-
-                        foreach (string dirPath in directoriesToCopy)
-                        {
-                            string dirPathStripped = dirPath.Substring(sourceDir.Length);
-                            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(backupDir, dirPathStripped));
-                        }
+                        AddFiles(sourceDir, filesToCopy);
 
                         foreach (string textFile in filesToCopy)
                         {
@@ -102,7 +95,6 @@ namespace CCTVBackup
                             catch (IOException)
                             {
                             }
-                            
                         }
 
                         notifyIcon.ShowBalloonTip(5000, "CCTV", "Files copied success", ToolTipIcon.Info);
@@ -113,6 +105,24 @@ namespace CCTVBackup
 
             watcher.Query = query;
             watcher.Start();
+        }
+
+        private static void AddFiles(string path, IList<string> files)
+        {
+            try
+            {
+                Directory.GetFiles(path)
+                    .ToList()
+                    .ForEach(s => files.Add(s));
+
+                Directory.GetDirectories(path)
+                    .ToList()
+                    .ForEach(s => AddFiles(s, files));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // ok, so we are not allowed to dig into that directory. Move on.
+            }
         }
 
         protected override void OnStateChanged(EventArgs e)
