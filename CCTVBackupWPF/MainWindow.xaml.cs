@@ -29,6 +29,12 @@ namespace CCTVBackup
         NameValueCollection appConfig;
         Icon iconMain;
         Icon iconDownloding;
+        const int BALOON_TIP_DELAY = 5000; // ms
+
+        string backupDriveLabel;
+        string backupDir;
+
+        System.Windows.Forms.NotifyIcon notifyIcon = new System.Windows.Forms.NotifyIcon();
 
         public MainWindow()
         {
@@ -39,9 +45,8 @@ namespace CCTVBackup
 
             appConfig = ConfigurationManager.AppSettings;
 
-            backupPath.Content = appConfig.Get("Key2");
-
-            System.Windows.Forms.NotifyIcon notifyIcon = new System.Windows.Forms.NotifyIcon();
+            backupDriveLabel = appConfig.Get("cctvVolumeLabel");
+            backupDir = appConfig.Get("backupDir");
 
             notifyIcon.Icon = iconMain;
             notifyIcon.Visible = true;
@@ -53,58 +58,97 @@ namespace CCTVBackup
             };
 
             textBox.Clear();
+            textBox.AppendText("Starting app...");
 
+            textBox.AppendText("Available removable drive labels:" + Environment.NewLine);
+            bool backupDriveFound = false;
             foreach (DriveInfo drive in DriveInfo.GetDrives())
             {
                 if (drive.DriveType == DriveType.Removable)
                 {
-                    textBox.AppendText(drive.Name);
+                    textBox.AppendText(" * " + drive.Name);
                     textBox.AppendText(" " + drive.VolumeLabel);
-                    textBox.AppendText("\r\n");
+                    if (drive.VolumeLabel.ToString() == backupDriveLabel)
+                    {
+                        textBox.AppendText(" << This is the backup drive");
+                        backupDriveFound = true;
+                    }
+                    textBox.AppendText(Environment.NewLine);
                 }
+            }
+
+            if (backupDriveFound)
+            {
+                CopyFiles();
             }
 
             ManagementEventWatcher watcher = new ManagementEventWatcher();
             WqlEventQuery query = new WqlEventQuery("SELECT * FROM Win32_VolumeChangeEvent WHERE EventType = 2");
             watcher.EventArrived += (s, e) =>
             {
-                foreach (DriveInfo drive in DriveInfo.GetDrives())
-                {
-                    if (drive.DriveType == DriveType.Removable && drive.VolumeLabel == appConfig.Get("cctvVolumeLabel"))
-                    {
-                        textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText("Connected\r\n")));
-                        notifyIcon.Icon = iconDownloding;
-                        notifyIcon.ShowBalloonTip(5000, "CCTV", "CCTV Flash Drive connected as " + drive.RootDirectory + "\r\nCopying files...", ToolTipIcon.Info);
-
-                        string sourceDir = @drive.RootDirectory.ToString();
-                        string backupDir = appConfig.Get("backupDir");
-
-                        List<string> filesToCopy = new List<string>();
-
-                        AddFiles(sourceDir, filesToCopy);
-
-                        foreach (string textFile in filesToCopy)
-                        {
-                            string fileName = textFile.Substring(sourceDir.Length);
-
-                            try
-                            {
-                                File.Copy(System.IO.Path.Combine(sourceDir, fileName),
-                                    System.IO.Path.Combine(backupDir, fileName));
-                            }
-                            catch (IOException)
-                            {
-                            }
-                        }
-
-                        notifyIcon.ShowBalloonTip(5000, "CCTV", "Files copied success", ToolTipIcon.Info);
-                        notifyIcon.Icon = iconMain;
-                    }
-                }
+                CopyFiles();
             };
 
             watcher.Query = query;
             watcher.Start();
+        }
+
+        private void CopyFiles()
+        {
+            foreach (DriveInfo driveInfo in DriveInfo.GetDrives())
+            {
+                if ((driveInfo.DriveType == DriveType.Removable) && (driveInfo.VolumeLabel == backupDriveLabel))
+                {
+                    textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText("Connected backup drive volume: " + backupDriveLabel + Environment.NewLine)));
+
+                    notifyIcon.Icon = iconDownloding;
+                    notifyIcon.ShowBalloonTip(5000, "CCTV", "CCTV Flash Drive connected as " + driveInfo.RootDirectory + Environment.NewLine + "Copying files...", ToolTipIcon.Info);
+
+                    textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText("Copying files..." + Environment.NewLine)));
+
+                    string sourceDir = driveInfo.RootDirectory.ToString();
+
+                    List<string> filesToCopy = new List<string>();
+
+                    AddFiles(sourceDir, filesToCopy);
+
+                    foreach (string textFile in filesToCopy)
+                    {
+                        string fileName = textFile.Substring(sourceDir.Length);
+
+                        try
+                        {
+                            string sourcePath = System.IO.Path.Combine(sourceDir, fileName);
+                            string destinationPath = System.IO.Path.Combine(backupDir, fileName);
+
+                            if (!File.Exists(destinationPath))
+                            {
+                                System.IO.FileInfo file = new System.IO.FileInfo(destinationPath);
+                                file.Directory.Create();
+
+                                textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText(" * Copy file " + sourcePath + " to " + destinationPath + Environment.NewLine)));
+
+                                File.Copy(sourcePath, destinationPath, false);
+                            }
+                            else
+                            {
+                                textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText(" * File " + destinationPath + " already exists" + Environment.NewLine)));
+                            }
+                        }
+                        catch (IOException ioe)
+                        {
+                            textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText("IO Exception " + ioe + Environment.NewLine)));
+                        }
+                    }
+
+                    notifyIcon.ShowBalloonTip(BALOON_TIP_DELAY, "CCTV", "Files copied success", ToolTipIcon.Info);
+                    notifyIcon.Icon = iconMain;
+
+                    textBox.Dispatcher.Invoke(new Action(() => textBox.AppendText("Copying finished" + Environment.NewLine)));
+
+                    break;
+                }
+            }
         }
 
         private static void AddFiles(string path, IList<string> files)
